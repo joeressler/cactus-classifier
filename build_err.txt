@@ -1,0 +1,91 @@
+13:17:08 INFO == trichocereus_pachanoi (taxon 829212)
+13:17:10 INFO   taxon 829212: 100/250 photos collected
+13:17:13 INFO   taxon 829212: 200/250 photos collected
+13:17:18 INFO   taxon 829212: 250/250 photos collected
+13:17:32 INFO   downloaded 25/250
+13:17:42 INFO   downloaded 50/250
+13:17:52 INFO   downloaded 75/250
+13:18:02 INFO   downloaded 100/250
+13:18:12 INFO   downloaded 125/250
+13:18:24 INFO   downloaded 150/250
+13:18:35 INFO   downloaded 175/250
+13:18:45 INFO   downloaded 200/250
+13:18:55 INFO   downloaded 225/250
+13:19:06 INFO   downloaded 250/250
+13:19:08 INFO   split: {'train': 175, 'val': 50, 'test': 25}
+13:19:08 INFO == trichocereus_peruvianus (taxon 870382)
+13:19:10 INFO   taxon 870382: 100/250 photos collected
+13:19:14 INFO   taxon 870382: 200/250 photos collected
+13:19:17 INFO   taxon 870382: 214/250 photos collected
+13:19:17 WARNING   only 214 photos available for trichocereus_peruvianus (wanted 250)
+13:19:29 INFO   downloaded 25/214
+13:19:38 INFO   downloaded 50/214
+13:19:48 INFO   downloaded 75/214
+13:19:58 INFO   downloaded 100/214
+13:20:09 INFO   downloaded 125/214
+13:20:20 INFO   downloaded 150/214
+13:20:30 INFO   downloaded 175/214
+13:20:40 INFO   downloaded 200/214
+13:20:48 INFO   split: {'train': 150, 'val': 43, 'test': 21}
+13:20:48 INFO == trichocereus_bridgesii (taxon 870017)
+13:20:50 WARNING Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1020)'))': /v1/observations?taxon_id=870017&quality_grade=research&photos=true&per_page=100&order_by=id&order=desc&page=1
+13:20:53 INFO   taxon 870017: 100/250 photos collected
+13:20:55 INFO   taxon 870017: 200/250 photos collected
+13:20:58 INFO   taxon 870017: 250/250 photos collected
+13:21:11 INFO   downloaded 25/250
+13:21:22 INFO   downloaded 50/250
+13:21:32 INFO   downloaded 75/250
+13:21:42 INFO   downloaded 100/250
+13:21:53 INFO   downloaded 125/250
+13:22:04 INFO   downloaded 150/250
+13:22:15 INFO   downloaded 175/250
+13:22:26 INFO   downloaded 200/250
+13:22:37 INFO   downloaded 225/250
+13:22:48 INFO   downloaded 250/250
+13:22:50 INFO   split: {'train': 175, 'val': 50, 'test': 25}
+13:22:50 INFO == miss_cereus_repandus (taxon 320319)
+13:22:53 INFO   taxon 320319: 100/250 photos collected
+13:22:56 INFO   taxon 320319: 200/250 photos collected
+13:22:59 INFO   taxon 320319: 250/250 photos collected
+13:23:12 INFO   downloaded 25/250
+13:23:21 INFO   downloaded 50/250
+13:23:31 INFO   downloaded 75/250
+13:23:41 INFO   downloaded 100/250
+13:23:53 INFO   downloaded 125/250
+13:24:03 INFO   downloaded 150/250
+13:24:12 INFO   downloaded 175/250
+13:24:22 INFO   downloaded 200/250
+13:24:32 INFO   downloaded 225/250
+13:24:44 INFO   downloaded 250/250
+13:24:46 INFO   split: {'train': 175, 'val': 50, 'test': 25}
+13:24:46 INFO == miss_myrtillocactus_geometrizans (taxon 274227)
+13:24:48 INFO   taxon 274227: 100/250 photos collected
+13:24:51 INFO   taxon 274227: 200/250 photos collected
+13:24:54 INFO   taxon 274227: 250/250 photos collected
+13:25:07 INFO   downloaded 25/250
+13:25:18 INFO   downloaded 50/250
+13:25:27 INFO   downloaded 75/250
+13:25:36 INFO   downloaded 100/250
+13:25:46 INFO   downloaded 125/250
+13:25:57 INFO   downloaded 150/250
+13:26:07 INFO   downloaded 175/250
+13:26:17 INFO   downloaded 200/250
+13:26:26 INFO   downloaded 225/250
+13:26:36 INFO   downloaded 250/250
+13:26:37 INFO   split: {'train': 175, 'val': 50, 'test': 25}
+13:26:37 INFO == miss_pilosocereus_pachycladus (taxon 442108)
+13:26:41 INFO   taxon 442108: 100/250 photos collected
+13:26:43 WARNING Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1020)'))': /v1/observations?taxon_id=442108&quality_grade=research&photos=true&per_page=100&order_by=id&order=desc&page=1&id_below=254734529
+13:26:48 INFO   taxon 442108: 200/250 photos collected
+13:26:51 INFO   taxon 442108: 250/250 photos collected
+13:27:03 INFO   downloaded 25/250
+13:27:13 INFO   downloaded 50/250
+13:27:23 INFO   downloaded 75/250
+13:27:33 INFO   downloaded 100/250
+13:27:45 INFO   downloaded 125/250
+13:27:55 INFO   downloaded 150/250
+13:28:05 INFO   downloaded 175/250
+13:28:15 INFO   downloaded 200/250
+13:28:25 INFO   downloaded 225/250
+13:28:35 INFO   downloaded 250/250
+13:28:37 INFO   split: {'train': 175, 'val': 50, 'test': 25}

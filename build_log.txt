@@ -1,0 +1,11 @@
+
+Dataset summary
+class                                   train    val   test  total
+trichocereus_pachanoi                     175     50     25    250
+trichocereus_peruvianus                   150     43     21    214
+trichocereus_bridgesii                    175     50     25    250
+miss_cereus_repandus                      175     50     25    250
+miss_myrtillocactus_geometrizans          175     50     25    250
+miss_pilosocereus_pachycladus             175     50     25    250
+
+Images in C:\Users\joear\OneDrive\Documents\GitHub\cactus-classifier\dataset; manifest at C:\Users\joear\OneDrive\Documents\GitHub\cactus-classifier\dataset\manifest.csv
