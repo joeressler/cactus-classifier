@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import random
-import time
 from pathlib import Path
 
 import numpy as np
@@ -125,6 +124,117 @@ def predict(model: nn.Module, loader: DataLoader, device: torch.device) -> tuple
     return actual, predicted, loss_sum / max(seen, 1)
 
 
+@torch.inference_mode()
+def predict_with_probabilities(
+    model: nn.Module, loader: DataLoader, device: torch.device,
+) -> tuple[list[int], np.ndarray, float]:
+    """Return targets, softmax probabilities, and mean cross-entropy loss."""
+    model.eval()
+    actual: list[int] = []
+    probabilities: list[np.ndarray] = []
+    loss_sum = 0.0
+    seen = 0
+    criterion = nn.CrossEntropyLoss()
+    for images, labels in loader:
+        images, labels = images.to(device), labels.to(device)
+        logits = model(images)
+        loss_sum += criterion(logits, labels).item() * labels.size(0)
+        probabilities.extend(torch.softmax(logits, dim=1).cpu().numpy())
+        actual.extend(labels.cpu().tolist())
+        seen += labels.size(0)
+    return actual, np.asarray(probabilities), loss_sum / max(seen, 1)
+
+
+def confidence_metrics(actual: list[int], probabilities: np.ndarray,
+                       bins: int = 15) -> dict:
+    """Summarize top-label confidence calibration and multiclass Brier score."""
+    predicted = probabilities.argmax(axis=1)
+    confidence = probabilities.max(axis=1)
+    correct = predicted == np.asarray(actual)
+    edges = np.linspace(0.0, 1.0, bins + 1)
+    calibration_bins = []
+    ece = 0.0
+    for index in range(bins):
+        lower, upper = edges[index], edges[index + 1]
+        in_bin = (confidence >= lower) & (confidence < upper if index < bins - 1
+                                          else confidence <= upper)
+        count = int(in_bin.sum())
+        if not count:
+            continue
+        accuracy = float(correct[in_bin].mean())
+        mean_confidence = float(confidence[in_bin].mean())
+        ece += count / len(actual) * abs(accuracy - mean_confidence)
+        calibration_bins.append({
+            "lower_confidence": float(lower),
+            "upper_confidence": float(upper),
+            "count": count,
+            "accuracy": accuracy,
+            "mean_confidence": mean_confidence,
+        })
+    targets = np.eye(probabilities.shape[1], dtype=np.float64)[np.asarray(actual)]
+    return {
+        "mean_top_confidence": float(confidence.mean()),
+        "accuracy_at_top_confidence": float(correct.mean()),
+        "expected_calibration_error_15_bins": float(ece),
+        "multiclass_brier_score": float(np.mean(np.sum((probabilities - targets) ** 2, axis=1))),
+        "calibration_bins": calibration_bins,
+    }
+
+
+def threshold_metrics(actual: list[int], probabilities: np.ndarray,
+                      class_names: list[str], threshold: float) -> dict:
+    """Map low-confidence predictions to unknown and summarize the tradeoff."""
+    if "unknown" not in class_names:
+        raise ValueError("Threshold-based rejection requires an 'unknown' class")
+    unknown_id = class_names.index("unknown")
+    confidence = probabilities.max(axis=1)
+    predicted = probabilities.argmax(axis=1)
+    predicted[confidence < threshold] = unknown_id
+    actual_array = np.asarray(actual)
+    is_unknown = actual_array == unknown_id
+    predicted_unknown = predicted == unknown_id
+    unknown_count = int(is_unknown.sum())
+    known_count = len(actual) - unknown_count
+    tp = int(np.sum(is_unknown & predicted_unknown))
+    fp = int(np.sum(~is_unknown & predicted_unknown))
+    fn = unknown_count - tp
+    precision = tp / max(tp + fp, 1)
+    recall = tp / max(unknown_count, 1)
+    return {
+        "threshold": float(threshold),
+        "accuracy": float(np.mean(predicted == actual_array)),
+        "macro_f1": float(classification_report(
+            actual, predicted, labels=list(range(len(class_names))),
+            target_names=class_names, output_dict=True, zero_division=0,
+        )["macro avg"]["f1-score"]),
+        "unknown_precision": precision,
+        "unknown_recall": recall,
+        "unknown_f1": 2 * precision * recall / max(precision + recall, 1e-12),
+        "known_rejection_rate": fp / max(known_count, 1),
+        "unknown_miss_rate": fn / max(unknown_count, 1),
+        "unknown_rejection_rate": recall,
+        "known_count": known_count,
+        "unknown_count": unknown_count,
+        "confusion_matrix": confusion_matrix(
+            actual, predicted, labels=list(range(len(class_names))),
+        ).tolist(),
+    }
+
+
+def choose_unknown_threshold(actual: list[int], probabilities: np.ndarray,
+                             class_names: list[str]) -> dict:
+    """Select the validation threshold maximizing unknown-vs-known F1.
+
+    Ties prefer fewer known examples rejected, then the lower threshold.
+    """
+    candidates = np.linspace(0.0, 1.0, 101)
+    results = [threshold_metrics(actual, probabilities, class_names, float(value))
+               for value in candidates]
+    return max(results, key=lambda row: (row["unknown_f1"],
+                                         -row["known_rejection_rate"],
+                                         -row["threshold"]))
+
+
 def report(actual: list[int], predicted: list[int], class_names: list[str], loss: float,
            majority_class: int | None = None) -> dict:
     details = classification_report(actual, predicted, labels=list(range(len(class_names))),
@@ -138,10 +248,15 @@ def report(actual: list[int], predicted: list[int], class_names: list[str], loss
                                                 labels=list(range(len(class_names)))).tolist(),
     }
     trichocereus_ids = [i for i, name in enumerate(class_names) if name.startswith("trichocereus_")]
-    if trichocereus_ids:
+    lookalike_ids = [i for i, name in enumerate(class_names) if name.startswith("miss_")]
+    if trichocereus_ids and lookalike_ids:
         trichocereus = set(trichocereus_ids)
-        binary_actual = [int(value in trichocereus) for value in actual]
-        binary_predicted = [int(value in trichocereus) for value in predicted]
+        known_ids = trichocereus | set(lookalike_ids)
+        known_positions = [i for i, value in enumerate(actual) if value in known_ids]
+        known_actual = [actual[i] for i in known_positions]
+        known_predicted = [predicted[i] for i in known_positions]
+        binary_actual = [int(value in trichocereus) for value in known_actual]
+        binary_predicted = [int(value in trichocereus) for value in known_predicted]
         binary = classification_report(binary_actual, binary_predicted, labels=[1, 0],
                                        target_names=["trichocereus", "lookalike"],
                                        output_dict=True, zero_division=0)
@@ -151,6 +266,22 @@ def report(actual: list[int], predicted: list[int], class_names: list[str], loss
             "trichocereus_recall": binary["trichocereus"]["recall"],
             "trichocereus_f1": binary["trichocereus"]["f1-score"],
             "confusion_matrix": confusion_matrix(binary_actual, binary_predicted,
+                                                    labels=[1, 0]).tolist(),
+        }
+    unknown_ids = {i for i, name in enumerate(class_names) if name == "unknown"}
+    if unknown_ids:
+        unknown_actual = [int(value in unknown_ids) for value in actual]
+        unknown_predicted = [int(value in unknown_ids) for value in predicted]
+        unknown_report = classification_report(
+            unknown_actual, unknown_predicted, labels=[1, 0],
+            target_names=["unknown", "known"], output_dict=True, zero_division=0,
+        )
+        result["unknown_vs_known"] = {
+            "accuracy": unknown_report["accuracy"],
+            "unknown_precision": unknown_report["unknown"]["precision"],
+            "unknown_recall": unknown_report["unknown"]["recall"],
+            "unknown_f1": unknown_report["unknown"]["f1-score"],
+            "confusion_matrix": confusion_matrix(unknown_actual, unknown_predicted,
                                                     labels=[1, 0]).tolist(),
         }
     if majority_class is not None:
@@ -200,7 +331,7 @@ def train(args: argparse.Namespace) -> int:
     criterion = nn.CrossEntropyLoss()
     output = args.output
     output.mkdir(parents=True, exist_ok=True)
-    best_macro_f1 = -1.0
+    best_selection_score = -1.0
     best_path = output / "best.pt"
     history: list[dict] = []
 
@@ -208,14 +339,17 @@ def train(args: argparse.Namespace) -> int:
     if initial_checkpoint is not None:
         initial_actual, initial_predicted, initial_val_loss = predict(model, val_loader, device)
         initial_metrics = report(initial_actual, initial_predicted, class_names, initial_val_loss)
-        best_macro_f1 = initial_metrics["macro_f1"]
+        best_selection_score = initial_metrics[args.selection_metric]
         torch.save({"model_name": args.model, "class_names": class_names,
                     "image_size": args.image_size, "state_dict": model.state_dict(),
                     "val_accuracy": initial_metrics["accuracy"],
-                    "val_macro_f1": best_macro_f1, "train_class_counts": class_counts,
+                    "val_macro_f1": initial_metrics["macro_f1"],
+                    "selection_metric": args.selection_metric,
+                    "selection_score": best_selection_score,
+                    "train_class_counts": class_counts,
                     "majority_class": majority_class,
                     "initialized_from": str(args.init_checkpoint)}, best_path)
-        print(f"Starting checkpoint validation macro F1: {best_macro_f1:.3f}")
+        print(f"Starting checkpoint validation {args.selection_metric}: {best_selection_score:.3f}")
 
     for epoch in range(1, args.epochs + 1):
         train_loss, train_accuracy = train_one_epoch(model, train_loader, criterion,
@@ -231,18 +365,21 @@ def train(args: argparse.Namespace) -> int:
         print(f"Epoch {epoch:03d}/{args.epochs}: train loss {train_loss:.4f}, "
               f"accuracy {train_accuracy:.3f}; val loss {val_loss:.4f}, "
               f"accuracy {val_accuracy:.3f}, macro F1 {val_macro_f1:.3f}")
-        if val_macro_f1 > best_macro_f1:
-            best_macro_f1 = val_macro_f1
+        selection_score = val_metrics[args.selection_metric]
+        if selection_score > best_selection_score:
+            best_selection_score = selection_score
             torch.save({"model_name": args.model, "class_names": class_names,
                         "image_size": args.image_size, "state_dict": model.state_dict(),
                         "val_accuracy": val_accuracy, "val_macro_f1": val_macro_f1,
+                        "selection_metric": args.selection_metric,
+                        "selection_score": best_selection_score,
                         "train_class_counts": class_counts,
                         "majority_class": majority_class,
                         "initialized_from": str(args.init_checkpoint) if args.init_checkpoint else None},
                        best_path)
 
     (output / "history.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
-    print(f"Best checkpoint: {best_path} (validation macro F1 {best_macro_f1:.3f})")
+    print(f"Best checkpoint: {best_path} (validation {args.selection_metric} {best_selection_score:.3f})")
     return 0
 
 
@@ -257,13 +394,60 @@ def evaluate(args: argparse.Namespace) -> int:
         raise ValueError("Evaluation class folders do not match the checkpoint classes")
     model = make_model(checkpoint["model_name"], len(class_names), pretrained=False).to(device)
     model.load_state_dict(checkpoint["state_dict"])
-    actual, predicted, loss = predict(model, loader, device)
+    actual, probabilities, loss = predict_with_probabilities(model, loader, device)
+    predicted = probabilities.argmax(axis=1).tolist()
     metrics = report(actual, predicted, class_names, loss,
                      majority_class=checkpoint.get("majority_class"))
+    metrics["confidence"] = confidence_metrics(actual, probabilities)
     print(json.dumps(metrics, indent=2))
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    return 0
+
+
+def calibrate(args: argparse.Namespace) -> int:
+    """Tune an unknown-rejection threshold on validation, then report test results."""
+    device = get_device(args.device)
+    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=True)
+    class_names = checkpoint["class_names"]
+    if "unknown" not in class_names:
+        raise ValueError("Calibration requires a checkpoint trained with an 'unknown' class")
+    _, eval_transform = make_transforms(checkpoint["image_size"])
+    model = make_model(checkpoint["model_name"], len(class_names), pretrained=False).to(device)
+    model.load_state_dict(checkpoint["state_dict"])
+
+    split_outputs: dict[str, tuple[list[int], np.ndarray, float]] = {}
+    for split in ("val", "test"):
+        loader = make_loader(args.data / split, eval_transform, args.batch_size,
+                             args.workers, False)
+        if loader.dataset.classes != class_names:
+            raise ValueError(f"{split.title()} class folders do not match the checkpoint classes")
+        split_outputs[split] = predict_with_probabilities(model, loader, device)
+
+    val_actual, val_probabilities, _ = split_outputs["val"]
+    selected = choose_unknown_threshold(val_actual, val_probabilities, class_names)
+    test_actual, test_probabilities, test_loss = split_outputs["test"]
+    test_predictions = test_probabilities.argmax(axis=1).tolist()
+    baseline = report(test_actual, test_predictions, class_names, test_loss,
+                      majority_class=checkpoint.get("majority_class"))
+    thresholded = threshold_metrics(test_actual, test_probabilities, class_names,
+                                    selected["threshold"])
+    result = {
+        "threshold_selection": "maximum validation unknown-vs-known F1; ties prefer fewer known rejections, then lower threshold",
+        "validation": selected,
+        "test_argmax": {
+            "accuracy": baseline["accuracy"],
+            "macro_f1": baseline["macro_f1"],
+            "unknown_vs_known": baseline.get("unknown_vs_known"),
+        },
+        "test_thresholded": thresholded,
+        "test_confidence": confidence_metrics(test_actual, test_probabilities),
+    }
+    print(json.dumps(result, indent=2))
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(result, indent=2), encoding="utf-8")
     return 0
 
 
@@ -282,6 +466,9 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--image-size", type=int, default=224)
     train_parser.add_argument("--learning-rate", type=float, default=1e-3)
     train_parser.add_argument("--weight-decay", type=float, default=1e-4)
+    train_parser.add_argument("--selection-metric", choices=("accuracy", "macro_f1"),
+                              default="macro_f1",
+                              help="validation metric used to select the best checkpoint")
     train_parser.add_argument("--workers", type=int, default=4)
     train_parser.add_argument("--seed", type=int, default=42)
     train_parser.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"), default="auto")
@@ -298,6 +485,18 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"), default="auto")
     eval_parser.add_argument("--output", type=Path, help="optional path to write metrics JSON")
     eval_parser.set_defaults(func=evaluate)
+
+    calibration_parser = commands.add_parser(
+        "calibrate", help="select an unknown-rejection confidence threshold on validation data",
+    )
+    calibration_parser.add_argument("--checkpoint", type=Path, required=True)
+    calibration_parser.add_argument("--data", type=Path, default=Path("dataset"))
+    calibration_parser.add_argument("--batch-size", type=int, default=32)
+    calibration_parser.add_argument("--workers", type=int, default=4)
+    calibration_parser.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"), default="auto")
+    calibration_parser.add_argument("--output", type=Path,
+                                    help="optional path to write calibration and test metrics JSON")
+    calibration_parser.set_defaults(func=calibrate)
     return parser
 
 
