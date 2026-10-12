@@ -1,6 +1,7 @@
 ---
 pipeline_tag: image-classification
 library_name: pytorch
+license: apache-2.0
 tags:
   - image-classification
   - computer-vision
@@ -14,10 +15,10 @@ tags:
 ConvNeXt Small image classifier for three *Trichocereus* species, three cactus
 lookalikes, and a limited `unknown` category trained from other plants.
 
-> **License review required:** No model license is declared yet. Before making this
-> repository public, review the licenses and attribution requirements of the source
-> images and decide which license, if any, can be applied to the trained weights.
-> Training images are not included in this repository.
+This model repository is published under the Apache-2.0 license. Training images are
+not included; they remain subject to the terms and attribution requirements of their
+respective source observations. Source image license and attribution records are kept
+in the project dataset manifest.
 
 ## Model details
 
@@ -58,7 +59,9 @@ Splits were grouped by observation to reduce leakage between training and evalua
 Source image license and attribution records are kept in the project dataset manifest;
 those records and the images themselves are not included here.
 
-Training and export code: [cactus-classifier](https://github.com/joeressler/cactus-classifier).
+Training, dataset preparation, and export code: [cactus-classifier](https://github.com/joeressler/cactus-classifier).
+For a FastAPI and HTMX application that serves this classifier, see
+[cactus-server](https://github.com/joeressler/cactus-server).
 
 ## Inference
 

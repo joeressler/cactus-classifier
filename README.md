@@ -2,6 +2,13 @@
 
 Image classifier to tell true *Trichocereus* cacti apart from common lookalikes (hard negatives).
 
+## Published model
+
+The pretrained ConvNeXt Small checkpoint, inference loader, and evaluation artifacts
+are available on the [Hugging Face Hub](https://huggingface.co/jressler/cactus-classifier)
+under Apache-2.0. See [cactus-server](https://github.com/joeressler/cactus-server)
+for a FastAPI and HTMX application that serves the classifier.
+
 ## Install
 
 Install [uv](https://docs.astral.sh/uv/) if needed, then sync the project environment:
